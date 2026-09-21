@@ -1,0 +1,5 @@
+fastapi
+duckdb==0.10.3
+uvicorn[standard]
+pydantic
+httpx
