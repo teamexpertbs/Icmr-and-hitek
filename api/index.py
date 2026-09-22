@@ -37,7 +37,6 @@ def _make_conn():
     c.execute("SET extension_directory='/tmp/dkx'")
     c.execute("SET enable_progress_bar=false")
     c.execute("SET threads=2")
-    # No memory limit — use full container RAM
     for ext in ("parquet", "httpfs"):
         try:
             c.execute(f"LOAD {ext}")
@@ -48,7 +47,6 @@ def _make_conn():
                 pass
     c.execute("SET http_timeout=30000")
     c.execute("SET http_keep_alive=true")
-    # Sorted index views — DuckDB does binary search, reads only matching row groups
     pl = ", ".join(f"'{u}'" for u in PHONE_URLS)
     al = ", ".join(f"'{u}'" for u in AADHAR_URLS)
     c.execute(f"CREATE OR REPLACE VIEW v_phone  AS SELECT * FROM read_parquet([{pl}])")
@@ -138,7 +136,6 @@ def _auto(q: str, limit: int) -> dict:
     return {"query": q, "searched_fields": searched, "count": r["count"], "results": r["results"]}
 
 
-# ── FastAPI App ──────────────────────────────────────────────────────────────
 app = FastAPI(title="ICMR + HITEK Search API", version="2.0")
 
 
@@ -161,32 +158,23 @@ input:focus{border-color:#7c6fff}
 button{padding:13px 26px;background:linear-gradient(135deg,#7c6fff,#ff6b9d);border:none;border-radius:10px;color:#fff;font-size:1rem;font-weight:700;cursor:pointer}
 select{padding:13px 14px;background:#0d0d1a;border:1.5px solid #33335a;border-radius:10px;color:#e0e0f0;font-size:.9rem;outline:none}
 #res{background:#0d0d1a;border:1px solid #2a2a50;border-radius:12px;padding:18px;font-family:monospace;font-size:.82rem;white-space:pre-wrap;word-break:break-all;display:none;max-height:500px;overflow-y:auto;margin-top:14px;color:#88ff88}
-.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-.chip{background:#22223a;padding:5px 14px;border-radius:20px;font-size:.78rem;color:#8888c0}
 .foot{margin-top:22px;text-align:center;color:#444;font-size:.78rem}
 .foot a{color:#7c6fff;text-decoration:none}
-.info{background:#0a1a0a;border:1px solid #1a6a1a;border-radius:8px;padding:10px 14px;font-size:.8rem;color:#66ff88;margin-bottom:16px}
 </style></head>
 <body><div class="card">
-<h1>🔍 ICMR + HITEK API</h1>
+<h1>ICMR + HITEK API</h1>
 <p class="sub">5 Billion Records — Phone & Aadhaar Lookup</p>
-<div class="info">✅ Full server — No timeout! Phone ~3s | Aadhaar ~10s</div>
-<div class="chips">
-  <span class="chip">📱 Phone</span>
-  <span class="chip">🪪 Aadhaar</span>
-  <span class="chip">🆓 Free</span>
-</div>
 <div class="row">
-  <input id="q" type="text" placeholder="Phone ya Aadhaar number daalo..." onkeydown="if(event.key==='Enter')go()"/>
+  <input id="q" type="text" placeholder="Phone ya Aadhaar number..." onkeydown="if(event.key==='Enter')go()"/>
   <select id="f">
     <option value="">Auto</option>
-    <option value="phoneNumber">📱 Phone</option>
-    <option value="aadharNumber">🪪 Aadhaar</option>
+    <option value="phoneNumber">Phone</option>
+    <option value="aadharNumber">Aadhaar</option>
   </select>
   <button onclick="go()">Search</button>
 </div>
 <div id="res"></div>
-<div class="foot">👨‍💻 @kzr0x · <a href="/docs">API Docs</a> · <a href="/health">Status</a></div>
+<div class="foot"><a href="/docs">API Docs</a> | <a href="/health">Status</a></div>
 </div>
 <script>
 async function go(){
@@ -194,28 +182,21 @@ async function go(){
   const f=document.getElementById('f').value;
   const r=document.getElementById('res');
   if(!q)return;
-  r.style.display='block';r.style.color='#7c6fff';
-  r.textContent='⏳ Searching...';
+  r.style.display='block';r.style.color='#7c6fff';r.textContent='Searching...';
   const url=f?`/search?field=${f}&q=${encodeURIComponent(q)}`:`/search?q=${encodeURIComponent(q)}`;
   try{
     const d=await fetch(url);
     const t=await d.text();
     r.style.color=d.ok?'#88ff88':'#ff8888';
     r.textContent=JSON.stringify(JSON.parse(t),null,2);
-  }catch(e){r.style.color='#ff8888';r.textContent='❌ '+e.message;}
+  }catch(e){r.style.color='#ff8888';r.textContent='Error: '+e.message;}
 }
 </script></body></html>"""
 
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "dataset": "llmsunny/icrm-hitek-full-db-mixedcraka",
-        "records": 5_009_587_740,
-        "phone_search": "~3-5s",
-        "aadhaar_search": "~10-20s",
-    }
+    return {"status": "ok", "records": 5_009_587_740}
 
 
 @app.get("/search")
@@ -272,10 +253,7 @@ async def search_parallel(req: BatchRequest):
         for item in req.queries
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    safe = [
-        r if not isinstance(r, Exception) else {"error": str(r)}
-        for r in results
-    ]
+    safe = [r if not isinstance(r, Exception) else {"error": str(r)} for r in results]
     return Response(
         json.dumps({"searches": len(req.queries), "results": safe}, indent=2),
         media_type="application/json",
