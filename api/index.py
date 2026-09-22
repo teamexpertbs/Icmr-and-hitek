@@ -111,14 +111,14 @@ def _search(field: str, value: str, limit: int) -> dict:
         return {"field": field, "value": value, "count": 0, "results": []}
     v = value.replace("'", "''")
     if field == "aadharNumber":
-    clean_v = v.replace("'", "''")
-    sql = f"""SELECT * FROM {view} WHERE 
-              aadharNumber='{clean_v}' 
-              OR replace(replace(aadharNumber, chr(0), ''), chr(9), '')='{clean_v}'
-              LIMIT {limit * DUPLICATE_CAP + 10}"""
-else:
-    sql = f"SELECT * FROM {view} WHERE {field}='{v}' LIMIT {limit * DUPLICATE_CAP + 10}"
-
+        sql = (
+            f"SELECT * FROM {view} WHERE "
+            f"aadharNumber='{v}' "
+            f"OR replace(replace(aadharNumber, chr(0), ''), chr(9), '')='{v}' "
+            f"LIMIT {limit * DUPLICATE_CAP + 10}"
+        )
+    else:
+        sql = f"SELECT * FROM {view} WHERE {field}='{v}' LIMIT {limit * DUPLICATE_CAP + 10}"
     c = _conn()
     rows = c.execute(sql).fetchall()
     cols = [d[0] for d in c.description]
